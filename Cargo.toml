@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+tokio = { version = "1", features = ["full", "test-util"] } # For asynchronous runtime
 chrono = "0.4"
 hmac = "0.12"
 sha2 = "0.10"

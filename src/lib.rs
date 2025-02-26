@@ -4,6 +4,11 @@ use sha2::Sha256;
 use base32;
 use rand::Rng;
 
+use std::time::Duration;
+use tokio::time::sleep;
+
+
+
 // Define a custom character set that includes both letters and numbers.
 const CHARACTERS: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"; //RFC4648 base32 without padding
 const TOKEN_LENGTH: usize = 6; // Max token length
@@ -18,17 +23,30 @@ const TOKEN_LENGTH: usize = 6; // Max token length
 /// # Returns
 ///
 /// A `Result` containing the TOTP token as a `String` if successful, or an error message as a `String` if not.
-pub fn generate_totp(secret: &str, time_step: u64) -> Result<String, String> {
+pub async fn generate_totp(secret: &str, time_step: u64, blocking: bool) -> Result<String, String> {
     // Decode the secret from base32.
     let secret_bytes = match base32::decode(base32::Alphabet::Rfc4648 { padding: false }, secret) {
         Some(bytes) => bytes,
         None => return Err("Invalid base32 secret".to_string()),
     };
 
-    // Get the current timestamp as the number of time steps since the Unix epoch.
+    // Get the current timestamp.
     let now = Utc::now();
     let timestamp = now.timestamp();
+
+    // Calculate the number of time steps since the Unix epoch.
     let counter = (timestamp / time_step as i64) as u64;
+
+    //Calculate the time remaining for the current time step
+    let time_remaining = (time_step as i64) - (timestamp % (time_step as i64));
+
+    // Wait until the next time step if blocking is enabled
+    if blocking {
+        sleep(Duration::from_secs(time_remaining as u64)).await;
+    }
+
+    // Increment the counter for the *next* time step
+    let counter = counter+1;
 
     // Generate the HMAC-SHA256 hash.
     let hash = generate_hmac_sha256(&secret_bytes, counter);
@@ -122,15 +140,18 @@ pub fn generate_secret(length: usize) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tokio::test;
+
 
     #[test]
-    fn test_generate_totp() {
+    async fn test_generate_totp() {
         // Test with a known secret and time step.
         // Note: This is just an example, you'll need to update the expected value if the time has changed.
         let secret = "JBSWY3DPEHPK3PXP"; // Example base32 secret
         let time_step = 30; // Standard time step
+        let blocking = false;
 
-        match generate_totp(secret, time_step) {
+        match generate_totp(secret, time_step, blocking).await {
             Ok(token) => {
                 println!("Generated token: {}", token);
                 assert_eq!(token.len(), 6);
@@ -143,24 +164,25 @@ mod tests {
     }
 
     #[test]
-    fn test_generate_secret() {
+    async fn test_generate_secret() {
         let secret = generate_secret(10);
         println!("Generated secret: {}", secret);
         assert!(secret.len() > 0);
     }
 
     #[test]
-    fn test_invalid_secret() {
+    async fn test_invalid_secret() {
         let invalid_secret = "ThisIsNotBase32";
         let time_step = 30;
+        let blocking = false;
 
-        let result = generate_totp(invalid_secret, time_step);
+        let result = generate_totp(invalid_secret, time_step, blocking).await;
         assert!(result.is_err());
         assert_eq!(result.err(), Some("Invalid base32 secret".to_string()));
     }
 
     #[test]
-    fn test_format_token() {
+    async fn test_format_token() {
         let value = 12345;
         let length = 6;
         let token = format_token(value, length);

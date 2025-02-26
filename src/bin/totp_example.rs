@@ -3,9 +3,11 @@ use AlphaTOTP::{generate_totp, generate_secret}; // Import from your library
 use std::{thread, time}; // Import thread and time modules
 use clap::{Arg, App};
 
-fn main() {
+#[tokio::main]
+async fn main() {
     // Generate a default secret if one isn't provided
     let default_secret = generate_secret(20);
+    let blocking = true;
 
     let matches = App::new("TOTP Example")
         .version("1.0")
@@ -28,9 +30,9 @@ fn main() {
     let duration = time::Duration::from_secs(1);
 
     for i in 0..31 {
-        match generate_totp(&secret, 30) {
-            Ok(token) => println!("Second {}: TOTP Token: {}", i, token),
-            Err(err) => eprintln!("Second {}: Error generating TOTP: {}", i, err),
+        match generate_totp(&secret, 30, blocking).await {
+            Ok(token) => println!("{}: TOTP Token: {}", i, token),
+            Err(err) => eprintln!("{}: Error generating TOTP: {}", i, err),
         }
 
         thread::sleep(duration); // Use the pre-defined duration
